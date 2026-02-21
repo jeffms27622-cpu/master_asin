@@ -5,12 +5,12 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 # ==========================================
-# 1. KONFIGURASI
+# 1. KONFIGURASI PRIBADI PAK ASIN
 # ==========================================
 MASTER_PASSWORD = st.secrets["ADMIN_PASSWORD"]
 COMPANY_NAME = "PT. THEA THEO STATIONARY"
 
-st.set_page_config(page_title="STRATEGY CENTER - Pak Asin", layout="wide")
+st.set_page_config(page_title="MY STRATEGY - Pak Asin", layout="wide")
 
 def get_creds():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -24,74 +24,56 @@ def connect_gsheet():
         return None
 
 # --- UI UTAMA ---
-st.title("🛡️ TTS Strategic Command Center")
-st.subheader(f"Pengendali Penjualan - {COMPANY_NAME}")
+st.title("📓 My Strategic Notes")
+st.subheader(f"Database Riset Mandiri - {COMPANY_NAME}")
 
-pwd = st.sidebar.text_input("Master Key:", type="password")
+pwd = st.sidebar.text_input("Akses Masuk:", type="password")
 
 if pwd == MASTER_PASSWORD:
     wb = connect_gsheet()
     if wb:
-        menu = st.sidebar.radio("Navigasi:", 
-                                ["📊 Pantau Performa Marketing", 
-                                 "🎯 Manajemen Prospek & Barang Umpan"])
-
-        # --- MENU 1: PANTAU PERFORMA ---
-        if menu == "📊 Pantau Performa Marketing":
-            st.header("Ringkasan Aktivitas Tim")
-            sheet_main = wb.sheet1
-            data = sheet_main.get_all_values()
-            if len(data) > 1:
-                df = pd.DataFrame(data[1:], columns=data[0])
-                st.metric("Total Penawaran Terbit", len(df))
-                st.subheader("Data Penawaran Terakhir")
-                st.dataframe(df.tail(20), use_container_width=True)
-            else:
-                st.info("Belum ada data penawaran masuk dari marketing.")
-
-        # --- MENU 2: MANAJEMEN PROSPEK ---
-        elif menu == "🎯 Manajemen Prospek & Barang Umpan":
-            st.header("Target Customer & Strategi Pintu Masuk")
-            st.markdown("---")
+        # Tampilan Langsung: Form Riset
+        st.header("🎯 Input Calon Customer Baru")
+        
+        with st.form("form_riset"):
+            col1, col2 = st.columns(2)
+            with col1:
+                nama_pt = st.text_input("Nama Perusahaan (Target)")
+                link_maps = st.text_area("Alamat / Link Google Maps", placeholder="Tempel alamat atau link maps hasil riset")
             
-            with st.form("form_prospek"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    nama_pt = st.text_input("Nama Perusahaan (Target)")
-                    # MENAMBAHKAN KEMBALI LINK MAPS
-                    link_maps = st.text_area("Alamat / Link Google Maps", placeholder="Tempel link maps hasil riset Bapak di sini")
-                    assign_to = st.selectbox("Tugaskan Ke:", ["Alex", "Topan", "Artini"])
-                with col2:
-                    barang_umpan = st.text_input("Barang Umpan (Misal: Lakban, Stempel, Klip)", help="Barang kecil untuk pembuka pintu meeting")
-                    catatan_strategi = st.text_input("Pesan Khusus untuk Marketing", placeholder="Misal: Tawarkan sampel gratis dulu")
+            with col2:
+                barang_umpan = st.text_input("Barang Umpan (Contoh: Lakban, Stempel, Klip)")
+                catatan_pribadi = st.text_input("Catatan Strategi", placeholder="Misal: Barang ini mereka butuh banyak")
+            
+            submit = st.form_submit_button("Simpan ke Database")
+            
+            if submit:
+                try:
+                    # Memakai sheet khusus riset pribadi
+                    target_sheet = wb.worksheet("Riset_Pribadi_Asin")
+                except:
+                    target_sheet = wb.add_worksheet(title="Riset_Pribadi_Asin", rows="1000", cols="10")
+                    target_sheet.append_row(["Tanggal", "Perusahaan", "Link Maps", "Barang Umpan", "Catatan"])
                 
-                submit = st.form_submit_button("Kirim Tugas ke Marketing")
-                
-                if submit:
-                    try:
-                        target_sheet = wb.worksheet("Target_Prospek")
-                    except:
-                        target_sheet = wb.add_worksheet(title="Target_Prospek", rows="500", cols="10")
-                        # Header tabel disesuaikan
-                        target_sheet.append_row(["Tanggal", "Perusahaan", "Link Maps", "Sales", "Barang Umpan", "Pesan Strategi", "Status"])
-                    
-                    target_sheet.append_row([
-                        datetime.now().strftime("%d/%m/%Y"),
-                        nama_pt, link_maps, assign_to, barang_umpan, catatan_strategi, "Belum Dihubungi"
-                    ])
-                    st.success(f"Strategi dicatat! {nama_pt} ditugaskan ke {assign_to}.")
+                target_sheet.append_row([
+                    datetime.now().strftime("%d/%m/%Y"),
+                    nama_pt, link_maps, barang_umpan, catatan_pribadi
+                ])
+                st.success(f"Data {nama_pt} sudah tersimpan di buku rahasia Bapak.")
 
-            # Tampilkan Daftar Tunggu Prospek
-            try:
-                data_target = wb.worksheet("Target_Prospek").get_all_values()
-                if len(data_target) > 1:
-                    st.subheader("Daftar Pantauan Prospek")
-                    df_target = pd.DataFrame(data_target[1:], columns=data_target[0])
-                    # Menggunakan dataframe agar link yang panjang tidak memakan tempat
-                    st.dataframe(df_target.tail(15), use_container_width=True)
-            except:
-                pass
+        st.divider()
+
+        # Tampilkan Database Riset
+        try:
+            data_target = wb.worksheet("Riset_Pribadi_Asin").get_all_values()
+            if len(data_target) > 1:
+                st.subheader("📁 Daftar Riset Saya")
+                df_target = pd.DataFrame(data_target[1:], columns=data_target[0])
+                # Menampilkan dari yang terbaru di atas
+                st.dataframe(df_target.iloc[::-1], use_container_width=True)
+        except:
+            st.info("Belum ada data riset yang tersimpan.")
 
 else:
     if pwd != "":
-        st.error("Akses Ditolak.")
+        st.error("Password Salah.")
