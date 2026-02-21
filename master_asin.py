@@ -25,7 +25,6 @@ def connect_gsheet():
     except Exception as e:
         return None
 
-# --- FUNGSI WA LINK GENERATOR ---
 def buat_link_wa(nomor, nama_pt):
     if not nomor or nomor == "-" or nomor == "" or nomor == "None":
         return None
@@ -52,9 +51,6 @@ if wb:
     except:
         target_sheet = wb.get_worksheet(0) 
 
-    # ==========================================
-    # HALAMAN ADMIN: INPUT
-    # ==========================================
     if access_type == "Admin (Setor Data)" and pwd == ADMIN_ENTRY_PWD:
         st.header("📥 Form Setoran Data (Admin)")
         with st.form("form_admin"):
@@ -74,9 +70,6 @@ if wb:
                 else:
                     st.error("Nama Perusahaan wajib diisi!")
 
-    # ==========================================
-    # HALAMAN MASTER: DASHBOARD
-    # ==========================================
     elif access_type == "Master (Pak Asin)" and pwd == MASTER_PASSWORD:
         st.header("🛡️ Strategic Master Dashboard")
         
@@ -90,28 +83,28 @@ if wb:
                 with c2:
                     m_umpan = st.text_input("Barang Umpan")
                     m_catatan = st.text_input("Catatan Strategi")
-                
                 submit_master = st.form_submit_button("Simpan Riset Master")
-                
-                if submit_master:
-                    if m_pt:
-                        target_sheet.append_row([
-                            datetime.now().strftime("%d/%m/%Y"), 
-                            m_pt, m_wa, m_maps, m_umpan, "Siap Eksekusi", m_catatan
-                        ])
-                        st.success("Berhasil simpan!")
-                        st.rerun()
-                    else:
-                        st.error("Nama Perusahaan wajib diisi!")
+                if submit_master and m_pt:
+                    target_sheet.append_row([datetime.now().strftime("%d/%m/%Y"), m_pt, m_wa, m_maps, m_umpan, "Siap Eksekusi", m_catatan])
+                    st.success("Berhasil simpan!")
+                    st.rerun()
 
         st.divider()
 
-        # TABEL DATABASE
         try:
             data_all = target_sheet.get_all_values()
-            if len(data_all) > 1:
-                df_all = pd.DataFrame(data_all[1:], columns=data_all[0])
-                # Tambahkan kolom Chat WA
+            if len(data_all) > 0:
+                # FIX: Menangani kolom kosong/duplikat
+                headers = []
+                for i, val in enumerate(data_all[0]):
+                    if val.strip() == "":
+                        headers.append(f"Kolom_{i}")
+                    else:
+                        headers.append(val)
+                
+                df_all = pd.DataFrame(data_all[1:], columns=headers)
+                
+                # Tambahkan Chat WA
                 df_all['Chat WA'] = df_all.apply(lambda x: buat_link_wa(x[df_all.columns[2]], x[df_all.columns[1]]), axis=1)
 
                 cari = st.text_input("🔍 Cari PT atau Lokasi:")
@@ -135,24 +128,18 @@ if wb:
                     with st.spinner("Menyimpan..."):
                         for index, row in edited_df.iterrows():
                             try:
-                                # Cari baris di GSheet berdasarkan nama PT
                                 match_idx = df_all[df_all[df_all.columns[1]] == row[df_all.columns[1]]].index[0] + 2
-                                # Update data kolom 3 sampai 7
-                                target_sheet.update_cell(match_idx, 3, str(row[df_all.columns[2]]))
-                                target_sheet.update_cell(match_idx, 4, str(row[df_all.columns[3]]))
-                                target_sheet.update_cell(match_idx, 5, str(row[df_all.columns[4]]))
-                                target_sheet.update_cell(match_idx, 6, str(row[df_all.columns[5]]))
-                                target_sheet.update_cell(match_idx, 7, str(row[df_all.columns[6]]))
-                            except Exception:
+                                for i in range(2, 7): # Update kolom 3 sampai 7
+                                    target_sheet.update_cell(match_idx, i+1, str(row[df_all.columns[i]]))
+                            except:
                                 continue
                     st.toast("Data Diperbarui!", icon="🚀")
                     st.rerun()
             else:
                 st.info("Database kosong.")
         except Exception as e:
-            st.error(f"Error tabel: {e}")
+            st.error(f"Terjadi kesalahan: {e}")
     else:
-        if pwd != "":
-            st.error("Password Salah!")
+        if pwd != "": st.error("Password Salah!")
 else:
-    st.error("Gagal terhubung ke Google Sheets. Cek secrets Anda.")
+    st.error("Gagal terhubung ke Google Sheets.")
