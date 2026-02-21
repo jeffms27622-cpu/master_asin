@@ -82,7 +82,8 @@ if pwd == MASTER_PASSWORD:
                 cari = st.text_input("🔍 Cari PT atau Lokasi:")
                 df_tampil = df_all.copy()
                 if cari:
-                    df_tampil = df_tampil[df_tampil.apply(lambda row: row.astype(str).str.contains(cari, case=False).any(), axis=1)]
+                    mask = df_tampil.apply(lambda row: row.astype(str).str.contains(cari, case=False).any(), axis=1)
+                    df_tampil = df_tampil[mask]
 
                 # Gunakan data_editor untuk mengubah status
                 edited_df = st.data_editor(
@@ -96,10 +97,25 @@ if pwd == MASTER_PASSWORD:
                     key="editor_strategi"
                 )
 
-                # Logika Simpan Otomatis jika ada perubahan
+                # Logika Simpan Otomatis
                 if not edited_df.equals(df_tampil):
-                    # Cari baris mana yang berubah
                     for index, row in edited_df.iterrows():
-                        # Ambil posisi baris asli di Google Sheet (index + 2 karena header dan mulai dari 1)
-                        # Kita cari berdasarkan Nama Perusahaan agar akurat
-                        original_row_idx = df_all[df_all['
+                        # Mencocokkan berdasarkan Nama PT untuk update status
+                        try:
+                            # Cari index asli di df_all
+                            match_idx = df_all[df_all['Perusahaan'] == row['Perusahaan']].index[0]
+                            # Update di Google Sheet (idx + 2 karena header)
+                            target_sheet.update_cell(match_idx + 2, 5, row['Status'])
+                        except:
+                            continue
+                    
+                    st.toast("✅ Status diperbarui!", icon="💾")
+                    st.rerun()
+            else:
+                st.info("Belum ada data riset.")
+        except Exception as e:
+            st.error(f"Gagal memuat data: {e}")
+
+else:
+    if pwd != "":
+        st.error("Password Salah.")
