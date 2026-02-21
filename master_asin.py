@@ -61,7 +61,7 @@ if wb:
             adm_nama = st.text_input("Nama Perusahaan / Customer")
             adm_wa = st.text_input("Nomor WA (Contoh: 0812345678)")
             adm_maps = st.text_area("Link Google Maps / Alamat")
-            submit_admin = st.form_submit_button("Setor ke Master") # TOMBOL SUBMIT ADMIN
+            submit_admin = st.form_submit_button("Setor ke Master")
             
             if submit_admin:
                 if adm_nama:
@@ -80,7 +80,6 @@ if wb:
     elif access_type == "Master (Pak Asin)" and pwd == MASTER_PASSWORD:
         st.header("🛡️ Strategic Master Dashboard")
         
-        # FORM INPUT MASTER
         with st.expander("➕ Input Riset Mandiri"):
             with st.form("form_master_input"):
                 c1, c2 = st.columns(2)
@@ -92,7 +91,7 @@ if wb:
                     m_umpan = st.text_input("Barang Umpan")
                     m_catatan = st.text_input("Catatan Strategi")
                 
-                submit_master = st.form_submit_button("Simpan Riset Master") # TOMBOL SUBMIT MASTER
+                submit_master = st.form_submit_button("Simpan Riset Master")
                 
                 if submit_master:
                     if m_pt:
@@ -112,7 +111,7 @@ if wb:
             data_all = target_sheet.get_all_values()
             if len(data_all) > 1:
                 df_all = pd.DataFrame(data_all[1:], columns=data_all[0])
-                # Buat Link WA
+                # Tambahkan kolom Chat WA
                 df_all['Chat WA'] = df_all.apply(lambda x: buat_link_wa(x[df_all.columns[2]], x[df_all.columns[1]]), axis=1)
 
                 cari = st.text_input("🔍 Cari PT atau Lokasi:")
@@ -133,7 +132,27 @@ if wb:
                 )
 
                 if st.button("💾 Simpan Perubahan Tabel"):
-                    for index, row in edited_df.iterrows():
-                        try:
-                            match_idx = df_all[df_all[df_all.columns[1]] == row[df_all.columns[1]]].index[0] + 2
-                            target_sheet.update_cell(match_idx
+                    with st.spinner("Menyimpan..."):
+                        for index, row in edited_df.iterrows():
+                            try:
+                                # Cari baris di GSheet berdasarkan nama PT
+                                match_idx = df_all[df_all[df_all.columns[1]] == row[df_all.columns[1]]].index[0] + 2
+                                # Update data kolom 3 sampai 7
+                                target_sheet.update_cell(match_idx, 3, str(row[df_all.columns[2]]))
+                                target_sheet.update_cell(match_idx, 4, str(row[df_all.columns[3]]))
+                                target_sheet.update_cell(match_idx, 5, str(row[df_all.columns[4]]))
+                                target_sheet.update_cell(match_idx, 6, str(row[df_all.columns[5]]))
+                                target_sheet.update_cell(match_idx, 7, str(row[df_all.columns[6]]))
+                            except Exception:
+                                continue
+                    st.toast("Data Diperbarui!", icon="🚀")
+                    st.rerun()
+            else:
+                st.info("Database kosong.")
+        except Exception as e:
+            st.error(f"Error tabel: {e}")
+    else:
+        if pwd != "":
+            st.error("Password Salah!")
+else:
+    st.error("Gagal terhubung ke Google Sheets. Cek secrets Anda.")
