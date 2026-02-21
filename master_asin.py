@@ -35,14 +35,13 @@ if pwd == MASTER_PASSWORD:
         # Tampilan Langsung: Form Riset
         st.header("🎯 Input Target Customer Baru")
         
-        with st.form("form_riset"):
+        with st.form("form_riset", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
                 nama_pt = st.text_input("Nama Perusahaan (Target)")
                 link_maps = st.text_area("Alamat / Link Google Maps", placeholder="Tempel alamat atau link maps")
             
             with col2:
-                # Dropdown Barang Umpan agar tidak perlu ngetik ulang
                 barang_umpan = st.selectbox("Barang Umpan:", 
                                            ["Lakban", "Stempel Kilat", "Kertas Foto", "Baterai", "Paper Clip", "Plastik Packing", "Lainnya..."])
                 if barang_umpan == "Lainnya...":
@@ -65,39 +64,42 @@ if pwd == MASTER_PASSWORD:
                     nama_pt, link_maps, barang_umpan, status_awal, catatan_pribadi
                 ])
                 st.success(f"Data {nama_pt} sudah tersimpan!")
-                st.rerun() # Refresh biar muncul di tabel bawah
+                st.rerun()
 
         st.divider()
 
-        # --- DATABASE & PENCARIAN ---
+        # --- DATABASE & PENCARIAN DENGAN AUTO-SAVE ---
         try:
-            data_target = wb.worksheet("Riset_Pribadi_Asin").get_all_values()
+            target_sheet = wb.worksheet("Riset_Pribadi_Asin")
+            data_target = target_sheet.get_all_values()
+            
             if len(data_target) > 1:
-                df_target = pd.DataFrame(data_target[1:], columns=data_target[0])
+                df_all = pd.DataFrame(data_target[1:], columns=data_target[0])
                 
                 st.subheader("📁 Daftar Riset & Progress")
                 
                 # Fitur Search
-                cari = st.text_input("🔍 Cari PT atau Lokasi (Contoh: Modernland):")
+                cari = st.text_input("🔍 Cari PT atau Lokasi:")
+                df_tampil = df_all.copy()
                 if cari:
-                    df_target = df_target[df_target.apply(lambda row: row.astype(str).str.contains(cari, case=False).any(), axis=1)]
+                    df_tampil = df_tampil[df_tampil.apply(lambda row: row.astype(str).str.contains(cari, case=False).any(), axis=1)]
 
-                # Menampilkan Tabel dengan Kolom Link yang bisa diklik
-                # Kita urutkan dari yang terbaru (paling atas)
-                st.data_editor(
-                    df_target.iloc[::-1], 
+                # Gunakan data_editor untuk mengubah status
+                edited_df = st.data_editor(
+                    df_tampil, 
                     column_config={
                         "Link Maps": st.column_config.LinkColumn("Buka di Maps"),
                         "Status": st.column_config.SelectboxColumn("Status", options=["Baru Ketemu", "Sudah Dihubungi", "Kirim Sampel", "Deal / Goal"])
                     },
                     use_container_width=True,
-                    disabled=["Tanggal", "Perusahaan"] # Biar tidak sengaja teredit
+                    disabled=["Tanggal", "Perusahaan", "Link Maps", "Barang Umpan", "Catatan"],
+                    key="editor_strategi"
                 )
-                
-                st.caption("Tips: Bapak bisa langsung mengubah 'Status' di tabel atas dan data akan tersimpan (jika menggunakan data_editor).")
-        except:
-            st.info("Belum ada data riset.")
 
-else:
-    if pwd != "":
-        st.error("Password Salah.")
+                # Logika Simpan Otomatis jika ada perubahan
+                if not edited_df.equals(df_tampil):
+                    # Cari baris mana yang berubah
+                    for index, row in edited_df.iterrows():
+                        # Ambil posisi baris asli di Google Sheet (index + 2 karena header dan mulai dari 1)
+                        # Kita cari berdasarkan Nama Perusahaan agar akurat
+                        original_row_idx = df_all[df_all['
