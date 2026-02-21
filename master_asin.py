@@ -23,14 +23,12 @@ def connect_gsheet():
         client = gspread.authorize(get_creds())
         return client.open("Antrean Penawaran TTS")
     except Exception as e:
-        st.error(f"Gagal koneksi ke Google Sheets: {e}")
         return None
 
 # --- FUNGSI WA LINK GENERATOR ---
 def buat_link_wa(nomor, nama_pt):
     if not nomor or nomor == "-" or nomor == "" or nomor == "None":
         return None
-    # Bersihkan nomor dari karakter non-angka
     nomor_bersih = ''.join(filter(str.isdigit, str(nomor)))
     if nomor_bersih.startswith('0'):
         nomor_bersih = '62' + nomor_bersih[1:]
@@ -49,21 +47,93 @@ pwd = st.sidebar.text_input("Password:", type="password")
 wb = connect_gsheet()
 
 if wb:
-    # Memilih Sheet. Jika 'Riset_Pribadi_Asin' tidak ada, pakai sheet pertama.
     try:
         target_sheet = wb.worksheet("Riset_Pribadi_Asin")
     except:
         target_sheet = wb.get_worksheet(0) 
 
     # ==========================================
-    # HALAMAN ADMIN: HANYA BISA INPUT
+    # HALAMAN ADMIN: INPUT
     # ==========================================
     if access_type == "Admin (Setor Data)" and pwd == ADMIN_ENTRY_PWD:
         st.header("📥 Form Setoran Data (Admin)")
-        st.info("Gunakan form ini untuk memasukkan data calon customer baru.")
-        
         with st.form("form_admin"):
-            nama_pt = st.text_input("Nama Perusahaan / Customer")
-            no_wa = st.text_input("Nomor WA (Contoh: 0812345678)")
-            link_maps = st.text_area("Link Google Maps / Alamat")
-            submit_admin = st.form
+            adm_nama = st.text_input("Nama Perusahaan / Customer")
+            adm_wa = st.text_input("Nomor WA (Contoh: 0812345678)")
+            adm_maps = st.text_area("Link Google Maps / Alamat")
+            submit_admin = st.form_submit_button("Setor ke Master") # TOMBOL SUBMIT ADMIN
+            
+            if submit_admin:
+                if adm_nama:
+                    target_sheet.append_row([
+                        datetime.now().strftime("%d/%m/%Y"), 
+                        adm_nama, adm_wa if adm_wa else "-", adm_maps if adm_maps else "-",
+                        "-", "Menunggu Strategi", "-"
+                    ])
+                    st.success(f"✅ Data {adm_nama} berhasil disetor!")
+                else:
+                    st.error("Nama Perusahaan wajib diisi!")
+
+    # ==========================================
+    # HALAMAN MASTER: DASHBOARD
+    # ==========================================
+    elif access_type == "Master (Pak Asin)" and pwd == MASTER_PASSWORD:
+        st.header("🛡️ Strategic Master Dashboard")
+        
+        # FORM INPUT MASTER
+        with st.expander("➕ Input Riset Mandiri"):
+            with st.form("form_master_input"):
+                c1, c2 = st.columns(2)
+                with c1:
+                    m_pt = st.text_input("Nama Perusahaan")
+                    m_wa = st.text_input("Nomor WA")
+                    m_maps = st.text_area("Link Maps")
+                with c2:
+                    m_umpan = st.text_input("Barang Umpan")
+                    m_catatan = st.text_input("Catatan Strategi")
+                
+                submit_master = st.form_submit_button("Simpan Riset Master") # TOMBOL SUBMIT MASTER
+                
+                if submit_master:
+                    if m_pt:
+                        target_sheet.append_row([
+                            datetime.now().strftime("%d/%m/%Y"), 
+                            m_pt, m_wa, m_maps, m_umpan, "Siap Eksekusi", m_catatan
+                        ])
+                        st.success("Berhasil simpan!")
+                        st.rerun()
+                    else:
+                        st.error("Nama Perusahaan wajib diisi!")
+
+        st.divider()
+
+        # TABEL DATABASE
+        try:
+            data_all = target_sheet.get_all_values()
+            if len(data_all) > 1:
+                df_all = pd.DataFrame(data_all[1:], columns=data_all[0])
+                # Buat Link WA
+                df_all['Chat WA'] = df_all.apply(lambda x: buat_link_wa(x[df_all.columns[2]], x[df_all.columns[1]]), axis=1)
+
+                cari = st.text_input("🔍 Cari PT atau Lokasi:")
+                df_tampil = df_all.copy()
+                if cari:
+                    df_tampil = df_tampil[df_tampil.apply(lambda row: row.astype(str).str.contains(cari, case=False).any(), axis=1)]
+
+                edited_df = st.data_editor(
+                    df_tampil.iloc[::-1],
+                    column_config={
+                        "Chat WA": st.column_config.LinkColumn("Action WA", display_text="Chat Sekarang 🟢"),
+                        df_all.columns[3]: st.column_config.LinkColumn("Maps"),
+                        "Status": st.column_config.SelectboxColumn("Status", options=["Menunggu Strategi", "Siap Eksekusi", "Sudah Dihubungi", "Kirim Sampel", "Deal / Goal"]),
+                    },
+                    use_container_width=True,
+                    disabled=[df_all.columns[0], "Chat WA"],
+                    key="editor_master"
+                )
+
+                if st.button("💾 Simpan Perubahan Tabel"):
+                    for index, row in edited_df.iterrows():
+                        try:
+                            match_idx = df_all[df_all[df_all.columns[1]] == row[df_all.columns[1]]].index[0] + 2
+                            target_sheet.update_cell(match_idx
