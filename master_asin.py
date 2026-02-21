@@ -8,7 +8,7 @@ from datetime import datetime
 # 1. KONFIGURASI
 # ==========================================
 MASTER_PASSWORD = st.secrets["ADMIN_PASSWORD"] 
-ADMIN_ENTRY_PWD = "tts_admin_setor"           
+ADMIN_ENTRY_PWD = "ike"           
 COMPANY_NAME = "PT. THEA THEO STATIONARY"
 
 st.set_page_config(page_title="STRATEGY SYSTEM - TTS", layout="wide")
@@ -114,3 +114,4 @@ if wb:
                 st.info("Belum ada data.")
         except Exception as e:
             st.error(f"Error: {e}")
+
