@@ -7,8 +7,8 @@ from datetime import datetime
 # ==========================================
 # 1. KONFIGURASI
 # ==========================================
-MASTER_PASSWORD = st.secrets["ADMIN_PASSWORD"] # Password Bapak
-ADMIN_ENTRY_PWD = "ike"           # Password buat Admin (Bisa Bapak ganti)
+MASTER_PASSWORD = st.secrets["ADMIN_PASSWORD"] 
+ADMIN_ENTRY_PWD = "tts_admin_setor"           
 COMPANY_NAME = "PT. THEA THEO STATIONARY"
 
 st.set_page_config(page_title="STRATEGY SYSTEM - TTS", layout="wide")
@@ -26,95 +26,91 @@ def connect_gsheet():
 
 # --- SIDEBAR NAVIGASI ---
 st.sidebar.title("🔑 Login System")
-access_type = st.sidebar.radio("Masuk Sebagai:", ["Admin (Setor Data)", "Master (Pak Asin)"])
+access_type = st.sidebar.radio("Masuk Sebagai:", ["Master (Pak Asin)", "Admin (Setor Data)"])
 pwd = st.sidebar.text_input("Password:", type="password")
 
 wb = connect_gsheet()
 
 if wb:
     # ==========================================
-    # HALAMAN ADMIN: HANYA BISA INPUT
+    # HALAMAN ADMIN: HANYA BISA INPUT DATA MENTAH
     # ==========================================
     if access_type == "Admin (Setor Data)" and pwd == ADMIN_ENTRY_PWD:
-        st.header("📥 Form Setoran Data Calon Customer")
-        st.info("Silakan masukkan data hasil riset Google Maps di bawah ini.")
-        
+        st.header("📥 Form Setoran Admin")
         with st.form("form_admin"):
             nama_pt = st.text_input("Nama Perusahaan")
             link_maps = st.text_area("Link Google Maps / Alamat")
             submit_admin = st.form_submit_button("Setor ke Master")
-            
-            if submit_admin:
-                if nama_pt and link_maps:
-                    try:
-                        sheet = wb.worksheet("Riset_Pribadi_Asin")
-                    except:
-                        sheet = wb.add_worksheet(title="Riset_Pribadi_Asin", rows="1000", cols="10")
-                        sheet.append_row(["Tanggal", "Perusahaan", "Link Maps", "Barang Umpan", "Status", "Catatan"])
-                    
-                    # Admin hanya mengisi 3 kolom pertama, sisanya kosong/default
-                    sheet.append_row([
-                        datetime.now().strftime("%d/%m/%Y"),
-                        nama_pt, link_maps, "-", "Menunggu Strategi", "-"
-                    ])
-                    st.success("✅ Data berhasil disetor ke Pak Asin!")
-                else:
-                    st.error("Nama PT dan Maps wajib diisi!")
+            if submit_admin and nama_pt:
+                try:
+                    sheet = wb.worksheet("Riset_Pribadi_Asin")
+                except:
+                    sheet = wb.add_worksheet(title="Riset_Pribadi_Asin", rows="1000", cols="10")
+                    sheet.append_row(["Tanggal", "Perusahaan", "Link Maps", "Barang Umpan", "Status", "Catatan"])
+                sheet.append_row([datetime.now().strftime("%d/%m/%Y"), nama_pt, link_maps, "-", "Menunggu Strategi", "-"])
+                st.success("✅ Data berhasil disetor!")
 
     # ==========================================
-    # HALAMAN MASTER: KENDALI PENUH PAK ASIN
+    # HALAMAN MASTER: PENGATURAN & INPUT MANDIRI
     # ==========================================
     elif access_type == "Master (Pak Asin)" and pwd == MASTER_PASSWORD:
         st.header("🛡️ Strategic Master Dashboard")
         
+        # --- FITUR 1: INPUT MANDIRI PAK ASIN ---
+        with st.expander("➕ Input Riset Mandiri (Hanya Bapak yang Lihat)"):
+            with st.form("form_master_input"):
+                c1, c2 = st.columns(2)
+                with c1:
+                    m_pt = st.text_input("Nama Perusahaan")
+                    m_maps = st.text_area("Link Maps")
+                with c2:
+                    m_umpan = st.text_input("Barang Umpan")
+                    m_catatan = st.text_input("Catatan Rahasia")
+                
+                if st.form_submit_button("Simpan Riset Saya"):
+                    sheet = wb.worksheet("Riset_Pribadi_Asin")
+                    sheet.append_row([datetime.now().strftime("%d/%m/%Y"), m_pt, m_maps, m_umpan, "Siap Eksekusi", m_catatan])
+                    st.success("Berhasil simpan riset pribadi!")
+                    st.rerun()
+
+        st.divider()
+
+        # --- FITUR 2: TABEL MONITORING & EDIT ---
         try:
             target_sheet = wb.worksheet("Riset_Pribadi_Asin")
             data_all = target_sheet.get_all_values()
-            
             if len(data_all) > 1:
                 df_all = pd.DataFrame(data_all[1:], columns=data_all[0])
                 
-                # --- FITUR SEARCH ---
+                st.subheader("📁 Database Strategi")
                 cari = st.text_input("🔍 Cari PT atau Lokasi:")
                 df_tampil = df_all.copy()
                 if cari:
-                    mask = df_tampil.apply(lambda row: row.astype(str).str.contains(cari, case=False).any(), axis=1)
-                    df_tampil = df_tampil[mask]
+                    df_tampil = df_tampil[df_tampil.apply(lambda row: row.astype(str).str.contains(cari, case=False).any(), axis=1)]
 
-                st.subheader("📁 Database Riset & Penentuan Strategi")
-                
-                # Pak Asin bisa edit: Barang Umpan, Status, dan Catatan
-                # Tapi Nama PT dan Maps di-lock (disabled) agar tidak teracak
                 edited_df = st.data_editor(
-                    df_tampil.iloc[::-1], # Yang terbaru di atas
+                    df_tampil.iloc[::-1],
                     column_config={
                         "Link Maps": st.column_config.LinkColumn("Maps"),
                         "Status": st.column_config.SelectboxColumn("Status", options=["Menunggu Strategi", "Siap Eksekusi", "Sudah Dihubungi", "Kirim Sampel", "Deal / Goal"]),
-                        "Barang Umpan": st.column_config.TextColumn("Barang Umpan"),
-                        "Catatan": st.column_config.TextColumn("Catatan Strategi")
                     },
                     use_container_width=True,
-                    disabled=["Tanggal", "Perusahaan", "Link Maps"],
+                    disabled=["Tanggal"], # Bapak bisa edit Perusahaan & Maps kalau mau koreksi input Admin
                     key="editor_master"
                 )
 
-                # Tombol Simpan Perubahan
-                if st.button("💾 Simpan Perubahan Strategi"):
+                if st.button("💾 Simpan Semua Perubahan"):
                     for index, row in edited_df.iterrows():
-                        # Cari baris asli di Google Sheet berdasarkan Nama PT
                         match_idx = df_all[df_all['Perusahaan'] == row['Perusahaan']].index[0] + 2
-                        # Update kolom 4 (Umpan), 5 (Status), 6 (Catatan)
+                        # Update semua kolom kecuali Tanggal
+                        target_sheet.update_cell(match_idx, 2, row['Perusahaan'])
+                        target_sheet.update_cell(match_idx, 3, row['Link Maps'])
                         target_sheet.update_cell(match_idx, 4, row['Barang Umpan'])
                         target_sheet.update_cell(match_idx, 5, row['Status'])
                         target_sheet.update_cell(match_idx, 6, row['Catatan'])
-                    
-                    st.toast("Strategi Berhasil Disimpan!", icon="🚀")
+                    st.toast("Semua data diperbarui!", icon="🚀")
                     st.rerun()
             else:
-                st.info("Belum ada setoran data dari Admin.")
+                st.info("Belum ada data.")
         except Exception as e:
             st.error(f"Error: {e}")
-
-    else:
-        if pwd != "":
-            st.warning("Password salah atau akses tidak diizinkan.")
