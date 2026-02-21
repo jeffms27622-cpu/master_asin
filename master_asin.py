@@ -2,18 +2,16 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import datetime, timedelta
-import plotly.express as px # Untuk grafik performa
+from datetime import datetime
 
 # ==========================================
-# 1. KONFIGURASI KHUSUS PAK ASIN
+# 1. KONFIGURASI
 # ==========================================
-MASTER_PASSWORD = st.secrets["ADMIN_PASSWORD"] # Pakai password admin yang sama
+MASTER_PASSWORD = st.secrets["ADMIN_PASSWORD"]
 COMPANY_NAME = "PT. THEA THEO STATIONARY"
 
-st.set_page_config(page_title="COMMAND CENTER - Pak Asin", layout="wide")
+st.set_page_config(page_title="STRATEGY CENTER - Pak Asin", layout="wide")
 
-# --- KONEKSI GOOGLE SERVICES ---
 def get_creds():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     return Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
@@ -21,25 +19,22 @@ def get_creds():
 def connect_gsheet():
     try:
         client = gspread.authorize(get_creds())
-        # Pastikan Bapak punya Sheet bernama 'Prospek' di file yang sama
         return client.open("Antrean Penawaran TTS")
     except:
-        st.error("Gagal koneksi ke database.")
         return None
 
 # --- UI UTAMA ---
 st.title("🛡️ TTS Strategic Command Center")
-st.subheader("Hanya untuk Pak Asin")
+st.subheader(f"Pengendali Penjualan - {COMPANY_NAME}")
 
 pwd = st.sidebar.text_input("Master Key:", type="password")
 
 if pwd == MASTER_PASSWORD:
     wb = connect_gsheet()
     if wb:
-        menu = st.sidebar.radio("Navigasi Strategis:", 
+        menu = st.sidebar.radio("Navigasi:", 
                                 ["📊 Pantau Performa Marketing", 
-                                 "🎯 Manajemen Prospek (Google Search)", 
-                                 "🕵️ Intelijen Harga Kompetitor"])
+                                 "🎯 Manajemen Prospek & Barang Umpan"])
 
         # --- MENU 1: PANTAU PERFORMA ---
         if menu == "📊 Pantau Performa Marketing":
@@ -48,66 +43,52 @@ if pwd == MASTER_PASSWORD:
             data = sheet_main.get_all_values()
             if len(data) > 1:
                 df = pd.DataFrame(data[1:], columns=data[0])
-                
-                # Statistik Cepat
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Total Penawaran", len(df))
-                col2.metric("Proses Pending", len(df[df['Status'] == 'Pending']))
-                col3.metric("Sales Aktif", df['Sales'].nunique())
-
-                st.divider()
-                st.subheader("Distribusi Kerja Marketing")
-                fig = px.pie(df, names='Sales', title='Jumlah Penawaran per Sales')
-                st.plotly_chart(fig)
-                
-                st.subheader("Log Transaksi Terbaru")
-                st.dataframe(df.tail(10), use_container_width=True)
+                st.metric("Total Penawaran Terbit", len(df))
+                st.subheader("Data Penawaran Terakhir")
+                st.dataframe(df.tail(20), use_container_width=True)
+            else:
+                st.info("Belum ada data penawaran masuk dari marketing.")
 
         # --- MENU 2: MANAJEMEN PROSPEK ---
-        elif menu == "🎯 Manajemen Prospek (Google Search)":
-            st.header("Input Target Customer Baru")
-            st.info("Hasil riset Bapak di Google masukkan di sini sebelum dibagikan ke marketing.")
+        elif menu == "🎯 Manajemen Prospek & Barang Umpan":
+            st.header("Target Customer & Strategi Pintu Masuk")
+            st.markdown("---")
             
             with st.form("form_prospek"):
-                nama_pt = st.text_input("Nama Perusahaan (Target)")
-                bidang = st.selectbox("Bidang Usaha", ["Pabrik", "Sekolah", "Kantor/Ruko", "Lainnya"])
-                alamat = st.text_area("Alamat / Link Google Maps")
-                assign_to = st.selectbox("Tugaskan Ke:", ["Asin", "Alex", "Topan", "Artini"])
-                submit = st.form_submit_button("Simpan & Tugaskan")
+                col1, col2 = st.columns(2)
+                with col1:
+                    nama_pt = st.text_input("Nama Perusahaan (Target)")
+                    assign_to = st.selectbox("Tugaskan Ke:", ["Alex", "Topan", "Artini"])
+                with col2:
+                    # FITUR NO. 3: BARANG RECEH/UMPAN
+                    barang_umpan = st.text_input("Barang Umpan (Misal: Lakban, Stempel, Klip)", help="Barang kecil untuk pembuka pintu meeting")
+                    catatan_strategi = st.text_input("Pesan Khusus untuk Marketing", placeholder="Misal: Tawarkan sampel gratis dulu")
+                
+                submit = st.form_submit_button("Kirim Tugas ke Marketing")
                 
                 if submit:
-                    # Bapak bisa buat sheet baru bernama 'Target_Prospek' di file excel yang sama
                     try:
                         target_sheet = wb.worksheet("Target_Prospek")
                     except:
-                        # Jika belum ada, buat otomatis (untuk pertama kali)
-                        target_sheet = wb.add_worksheet(title="Target_Prospek", rows="100", cols="10")
-                        target_sheet.append_row(["Tanggal", "Perusahaan", "Bidang", "Alamat", "Sales", "Status"])
+                        target_sheet = wb.add_worksheet(title="Target_Prospek", rows="500", cols="10")
+                        target_sheet.append_row(["Tanggal", "Perusahaan", "Sales", "Barang Umpan", "Pesan Strategi", "Status"])
                     
                     target_sheet.append_row([
-                        datetime.now().strftime("%Y-%m-%d"),
-                        nama_pt, bidang, alamat, assign_to, "Belum Dihubungi"
+                        datetime.now().strftime("%d/%m/%Y"),
+                        nama_pt, assign_to, barang_umpan, catatan_strategi, "Belum Dihubungi"
                     ])
-                    st.success(f"Berhasil! {nama_pt} ditugaskan ke {assign_to}.")
+                    st.success(f"Strategi dicatat! {nama_pt} akan ditembak dengan {barang_umpan} oleh {assign_to}.")
 
-        # --- MENU 3: INTELIJEN HARGA ---
-        elif menu == "🕵️ Intelijen Harga Kompetitor":
-            st.header("Catatan Harga Pasar")
-            st.write("Gunakan untuk membandingkan harga TTS dengan kompetitor agar 'umpan' Bapak tepat sasaran.")
-            
-            # Form input simpel untuk database pribadi Bapak
-            item = st.text_input("Nama Barang")
-            h_tts = st.number_input("Harga Modal TTS", min_value=0)
-            h_pasar = st.number_input("Harga Kompetitor (Hasil Intel)", min_value=0)
-            
-            if h_pasar > 0:
-                selisih = h_pasar - h_tts
-                st.warning(f"Potensi Keuntungan/Margin: Rp {selisih:,.0f}")
-                if selisih > 0:
-                    st.success("Kesimpulan: Harga kita kompetitif! Bisa jadi 'Barang Pintu Masuk'.")
-                else:
-                    st.error("Kesimpulan: Harga kita kalah. Cari supplier lain atau jangan jadikan umpan.")
+            # Tampilkan Daftar Tunggu Prospek
+            try:
+                data_target = wb.worksheet("Target_Prospek").get_all_values()
+                if len(data_target) > 1:
+                    st.subheader("Daftar Pantauan Prospek")
+                    df_target = pd.DataFrame(data_target[1:], columns=data_target[0])
+                    st.table(df_target.tail(10))
+            except:
+                pass
 
 else:
     if pwd != "":
-        st.error("Akses Ditolak. Key Salah.")
+        st.error("Akses Ditolak.")
