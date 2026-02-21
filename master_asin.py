@@ -58,9 +58,10 @@ if pwd == MASTER_PASSWORD:
                 col1, col2 = st.columns(2)
                 with col1:
                     nama_pt = st.text_input("Nama Perusahaan (Target)")
+                    # MENAMBAHKAN KEMBALI LINK MAPS
+                    link_maps = st.text_area("Alamat / Link Google Maps", placeholder="Tempel link maps hasil riset Bapak di sini")
                     assign_to = st.selectbox("Tugaskan Ke:", ["Alex", "Topan", "Artini"])
                 with col2:
-                    # FITUR NO. 3: BARANG RECEH/UMPAN
                     barang_umpan = st.text_input("Barang Umpan (Misal: Lakban, Stempel, Klip)", help="Barang kecil untuk pembuka pintu meeting")
                     catatan_strategi = st.text_input("Pesan Khusus untuk Marketing", placeholder="Misal: Tawarkan sampel gratis dulu")
                 
@@ -71,13 +72,14 @@ if pwd == MASTER_PASSWORD:
                         target_sheet = wb.worksheet("Target_Prospek")
                     except:
                         target_sheet = wb.add_worksheet(title="Target_Prospek", rows="500", cols="10")
-                        target_sheet.append_row(["Tanggal", "Perusahaan", "Sales", "Barang Umpan", "Pesan Strategi", "Status"])
+                        # Header tabel disesuaikan
+                        target_sheet.append_row(["Tanggal", "Perusahaan", "Link Maps", "Sales", "Barang Umpan", "Pesan Strategi", "Status"])
                     
                     target_sheet.append_row([
                         datetime.now().strftime("%d/%m/%Y"),
-                        nama_pt, assign_to, barang_umpan, catatan_strategi, "Belum Dihubungi"
+                        nama_pt, link_maps, assign_to, barang_umpan, catatan_strategi, "Belum Dihubungi"
                     ])
-                    st.success(f"Strategi dicatat! {nama_pt} akan ditembak dengan {barang_umpan} oleh {assign_to}.")
+                    st.success(f"Strategi dicatat! {nama_pt} ditugaskan ke {assign_to}.")
 
             # Tampilkan Daftar Tunggu Prospek
             try:
@@ -85,7 +87,8 @@ if pwd == MASTER_PASSWORD:
                 if len(data_target) > 1:
                     st.subheader("Daftar Pantauan Prospek")
                     df_target = pd.DataFrame(data_target[1:], columns=data_target[0])
-                    st.table(df_target.tail(10))
+                    # Menggunakan dataframe agar link yang panjang tidak memakan tempat
+                    st.dataframe(df_target.tail(15), use_container_width=True)
             except:
                 pass
 
