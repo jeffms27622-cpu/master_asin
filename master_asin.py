@@ -25,7 +25,7 @@ def connect_gsheet():
 
 # --- UI UTAMA ---
 st.title("📓 My Strategic Notes")
-st.subheader(f"Database Riset Mandiri - {COMPANY_NAME}")
+st.subheader(f"Database Riset Gerilya - {COMPANY_NAME}")
 
 pwd = st.sidebar.text_input("Akses Masuk:", type="password")
 
@@ -33,46 +33,70 @@ if pwd == MASTER_PASSWORD:
     wb = connect_gsheet()
     if wb:
         # Tampilan Langsung: Form Riset
-        st.header("🎯 Input Calon Customer Baru")
+        st.header("🎯 Input Target Customer Baru")
         
         with st.form("form_riset"):
             col1, col2 = st.columns(2)
             with col1:
                 nama_pt = st.text_input("Nama Perusahaan (Target)")
-                link_maps = st.text_area("Alamat / Link Google Maps", placeholder="Tempel alamat atau link maps hasil riset")
+                link_maps = st.text_area("Alamat / Link Google Maps", placeholder="Tempel alamat atau link maps")
             
             with col2:
-                barang_umpan = st.text_input("Barang Umpan (Contoh: Lakban, Stempel, Klip)")
-                catatan_pribadi = st.text_input("Catatan Strategi", placeholder="Misal: Barang ini mereka butuh banyak")
+                # Dropdown Barang Umpan agar tidak perlu ngetik ulang
+                barang_umpan = st.selectbox("Barang Umpan:", 
+                                           ["Lakban", "Stempel Kilat", "Kertas Foto", "Baterai", "Paper Clip", "Plastik Packing", "Lainnya..."])
+                if barang_umpan == "Lainnya...":
+                    barang_umpan = st.text_input("Sebutkan barang lain:")
+                
+                status_awal = st.selectbox("Status Saat Ini:", ["Baru Ketemu", "Sudah Dihubungi", "Kirim Sampel", "Deal / Goal"])
+                catatan_pribadi = st.text_input("Catatan Strategi", placeholder="Misal: PIC-nya galak tapi butuh stempel")
             
-            submit = st.form_submit_button("Simpan ke Database")
+            submit = st.form_submit_button("Simpan ke Buku Rahasia")
             
             if submit:
                 try:
-                    # Memakai sheet khusus riset pribadi
                     target_sheet = wb.worksheet("Riset_Pribadi_Asin")
                 except:
                     target_sheet = wb.add_worksheet(title="Riset_Pribadi_Asin", rows="1000", cols="10")
-                    target_sheet.append_row(["Tanggal", "Perusahaan", "Link Maps", "Barang Umpan", "Catatan"])
+                    target_sheet.append_row(["Tanggal", "Perusahaan", "Link Maps", "Barang Umpan", "Status", "Catatan"])
                 
                 target_sheet.append_row([
                     datetime.now().strftime("%d/%m/%Y"),
-                    nama_pt, link_maps, barang_umpan, catatan_pribadi
+                    nama_pt, link_maps, barang_umpan, status_awal, catatan_pribadi
                 ])
-                st.success(f"Data {nama_pt} sudah tersimpan di buku rahasia Bapak.")
+                st.success(f"Data {nama_pt} sudah tersimpan!")
+                st.rerun() # Refresh biar muncul di tabel bawah
 
         st.divider()
 
-        # Tampilkan Database Riset
+        # --- DATABASE & PENCARIAN ---
         try:
             data_target = wb.worksheet("Riset_Pribadi_Asin").get_all_values()
             if len(data_target) > 1:
-                st.subheader("📁 Daftar Riset Saya")
                 df_target = pd.DataFrame(data_target[1:], columns=data_target[0])
-                # Menampilkan dari yang terbaru di atas
-                st.dataframe(df_target.iloc[::-1], use_container_width=True)
+                
+                st.subheader("📁 Daftar Riset & Progress")
+                
+                # Fitur Search
+                cari = st.text_input("🔍 Cari PT atau Lokasi (Contoh: Modernland):")
+                if cari:
+                    df_target = df_target[df_target.apply(lambda row: row.astype(str).str.contains(cari, case=False).any(), axis=1)]
+
+                # Menampilkan Tabel dengan Kolom Link yang bisa diklik
+                # Kita urutkan dari yang terbaru (paling atas)
+                st.data_editor(
+                    df_target.iloc[::-1], 
+                    column_config={
+                        "Link Maps": st.column_config.LinkColumn("Buka di Maps"),
+                        "Status": st.column_config.SelectboxColumn("Status", options=["Baru Ketemu", "Sudah Dihubungi", "Kirim Sampel", "Deal / Goal"])
+                    },
+                    use_container_width=True,
+                    disabled=["Tanggal", "Perusahaan"] # Biar tidak sengaja teredit
+                )
+                
+                st.caption("Tips: Bapak bisa langsung mengubah 'Status' di tabel atas dan data akan tersimpan (jika menggunakan data_editor).")
         except:
-            st.info("Belum ada data riset yang tersimpan.")
+            st.info("Belum ada data riset.")
 
 else:
     if pwd != "":
