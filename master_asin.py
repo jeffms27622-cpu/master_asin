@@ -339,6 +339,259 @@ elif access_type == "🛡️ Master (Pak Asin)":
                     else:
                         st.error("Nama Perusahaan wajib diisi!")
 
+        # ==========================================
+        # --- RISET OTOMATIS (100% GRATIS) ---
+        # ==========================================
+        with st.expander("🔍 Riset Prospek Otomatis — Gratis 100%", expanded=False):
+            st.markdown(
+                '<div class="info-box">Cari perusahaan aktif dari <b>Jobstreet</b> (yang sedang buka lowongan = aktif & butuh ATK) dan <b>Yellow Pages Indonesia</b>. Sistem lalu otomatis menilai potensi tiap perusahaan.</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown("")
+
+            col_r1, col_r2, col_r3 = st.columns(3)
+            with col_r1:
+                r_kota = st.text_input("📍 Kota / Wilayah", placeholder="Contoh: Jakarta Barat")
+            with col_r2:
+                r_industri = st.selectbox(
+                    "🏭 Kategori Industri",
+                    ["Semua", "Manufaktur", "Perbankan & Keuangan", "Rumah Sakit & Klinik",
+                     "Hotel & Hospitality", "Pendidikan", "Properti & Konstruksi",
+                     "Retail & Distribusi", "Logistik"],
+                )
+            with col_r3:
+                r_sumber = st.multiselect(
+                    "📡 Sumber Data",
+                    ["Jobstreet", "Yellow Pages ID"],
+                    default=["Jobstreet", "Yellow Pages ID"],
+                )
+
+            if st.button("🚀 Mulai Riset Otomatis", type="primary", use_container_width=True):
+                if not r_kota.strip():
+                    st.warning("Masukkan kota/wilayah terlebih dahulu.")
+                else:
+                    import requests
+                    from bs4 import BeautifulSoup
+                    import re
+                    import time
+                    import random
+
+                    # ---- SCORING ENGINE (rule-based, 100% gratis) ----
+                    SKOR_INDUSTRI = {
+                        "bank": 95, "finance": 90, "asuransi": 88, "insurance": 88,
+                        "rumah sakit": 92, "hospital": 92, "klinik": 85, "clinic": 85,
+                        "hotel": 87, "hospitality": 85,
+                        "sekolah": 83, "universitas": 85, "pendidikan": 80, "education": 80,
+                        "manufaktur": 88, "manufacturing": 88, "pabrik": 86, "factory": 86,
+                        "properti": 80, "property": 80, "konstruksi": 78, "construction": 78,
+                        "logistik": 82, "logistics": 82, "ekspedisi": 80,
+                        "retail": 75, "distributor": 78,
+                        "teknologi": 77, "technology": 77, "it": 75,
+                        "konsultan": 80, "consulting": 80,
+                    }
+                    UMPAN_INDUSTRI = {
+                        "bank": "Kertas HVS A4 & Toner Printer",
+                        "finance": "Map Snelhecter & Ordner",
+                        "asuransi": "Kertas A4 & Ballpoint Box",
+                        "rumah sakit": "Formulir Medis & Ballpoint",
+                        "klinik": "Buku Rekam Medis & ATK",
+                        "hotel": "Ballpoint Hotel & Notepad",
+                        "sekolah": "Spidol Whiteboard & Penghapus",
+                        "universitas": "Kertas A4 & Tinta Printer",
+                        "manufaktur": "Buku Ekspedisi & Stempel",
+                        "pabrik": "Form Produksi & Ballpoint Box",
+                        "properti": "Map Proposal & Kertas HVS",
+                        "konstruksi": "Buku Lapangan & Alat Ukur",
+                        "logistik": "Label Pengiriman & Stempel",
+                        "retail": "Struk Kasir & Ballpoint",
+                        "teknologi": "Whiteboard & Spidol",
+                        "konsultan": "Kertas A4 Premium & Folder",
+                    }
+
+                    def hitung_skor(nama, jenis):
+                        nama_lower = (nama + " " + jenis).lower()
+                        skor = 60  # base score
+                        for kata, nilai in SKOR_INDUSTRI.items():
+                            if kata in nama_lower:
+                                skor = max(skor, nilai)
+                        # Bonus: ada kata PT/Tbk = lebih besar
+                        if any(x in nama.upper() for x in ["PT ", "TBK", "PT."]):
+                            skor = min(100, skor + 5)
+                        # Bonus: ada nomor telepon = data lebih lengkap
+                        return skor
+
+                    def tebak_umpan(nama, jenis):
+                        teks = (nama + " " + jenis).lower()
+                        for kata, umpan in UMPAN_INDUSTRI.items():
+                            if kata in teks:
+                                return umpan
+                        return "Kertas HVS A4 & Ballpoint"
+
+                    def skor_ke_estimasi(skor):
+                        if skor >= 85: return "Tinggi"
+                        if skor >= 72: return "Sedang"
+                        return "Rendah"
+
+                    HEADERS_SCRAPE = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8",
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    }
+
+                    hasil_gabung = []
+                    nama_sudah = set()
+
+                    # ---- SUMBER 1: JOBSTREET ----
+                    if "Jobstreet" in r_sumber:
+                        with st.spinner("📡 Scraping Jobstreet..."):
+                            try:
+                                kota_enc = urllib.parse.quote(r_kota.strip())
+                                industri_enc = "" if r_industri == "Semua" else urllib.parse.quote(r_industri)
+                                # Jobstreet pakai query lokasi di URL
+                                url_js = f"https://www.jobstreet.co.id/jobs?q={industri_enc}&l={kota_enc}&sp=homepage"
+                                resp_js = requests.get(url_js, headers=HEADERS_SCRAPE, timeout=15)
+                                soup_js = BeautifulSoup(resp_js.text, "html.parser")
+
+                                # Cari nama perusahaan dari listing
+                                # Jobstreet pakai data-automation="jobCardCompanyLink" atau class tertentu
+                                perusahaan_tags = soup_js.find_all(attrs={"data-automation": "jobCardCompanyLink"})
+                                if not perusahaan_tags:
+                                    # fallback: cari span/a dengan pola nama perusahaan
+                                    perusahaan_tags = soup_js.find_all("a", {"data-automation": "company-name"})
+                                if not perusahaan_tags:
+                                    perusahaan_tags = soup_js.select("[class*='company']")
+
+                                for tag in perusahaan_tags:
+                                    nama = tag.get_text(strip=True)
+                                    if nama and len(nama) > 3 and nama not in nama_sudah:
+                                        nama_sudah.add(nama)
+                                        skor = hitung_skor(nama, r_industri)
+                                        hasil_gabung.append({
+                                            "nama": nama,
+                                            "jenis": r_industri if r_industri != "Semua" else "Perusahaan Aktif",
+                                            "sumber": "Jobstreet",
+                                            "skor_potensi": skor,
+                                            "estimasi_kebutuhan": skor_ke_estimasi(skor),
+                                            "barang_umpan": tebak_umpan(nama, r_industri),
+                                            "alasan": f"Sedang aktif buka lowongan kerja di {r_kota} → operasional berjalan & butuh ATK rutin.",
+                                        })
+                            except Exception as e:
+                                st.warning(f"⚠️ Jobstreet: {e}")
+
+                    # ---- SUMBER 2: YELLOW PAGES ID ----
+                    if "Yellow Pages ID" in r_sumber:
+                        with st.spinner("📡 Scraping Yellow Pages Indonesia..."):
+                            try:
+                                kota_slug = r_kota.strip().lower().replace(" ", "-")
+                                industri_map = {
+                                    "Semua": "kantor",
+                                    "Manufaktur": "pabrik-manufaktur",
+                                    "Perbankan & Keuangan": "perbankan",
+                                    "Rumah Sakit & Klinik": "rumah-sakit",
+                                    "Hotel & Hospitality": "hotel",
+                                    "Pendidikan": "sekolah-universitas",
+                                    "Properti & Konstruksi": "properti-real-estate",
+                                    "Retail & Distribusi": "perdagangan-retail",
+                                    "Logistik": "jasa-pengiriman-ekspedisi",
+                                }
+                                slug_ind = industri_map.get(r_industri, "kantor")
+                                url_yp = f"https://www.yellowpages.co.id/search?q={urllib.parse.quote(slug_ind)}&l={urllib.parse.quote(r_kota.strip())}"
+                                resp_yp = requests.get(url_yp, headers=HEADERS_SCRAPE, timeout=15)
+                                soup_yp = BeautifulSoup(resp_yp.text, "html.parser")
+
+                                # Yellow Pages: nama bisnis biasanya di h2/h3 atau class listing-title
+                                listing_names = soup_yp.select(".listing-name, .business-name, h2.title, h3.name")
+                                if not listing_names:
+                                    listing_names = soup_yp.find_all(["h2", "h3"], class_=re.compile(r"(name|title|listing|company)", re.I))
+
+                                for tag in listing_names:
+                                    nama = tag.get_text(strip=True)
+                                    if nama and len(nama) > 3 and nama not in nama_sudah:
+                                        nama_sudah.add(nama)
+                                        skor = hitung_skor(nama, r_industri)
+                                        hasil_gabung.append({
+                                            "nama": nama,
+                                            "jenis": r_industri if r_industri != "Semua" else "Bisnis Terdaftar",
+                                            "sumber": "Yellow Pages",
+                                            "skor_potensi": skor,
+                                            "estimasi_kebutuhan": skor_ke_estimasi(skor),
+                                            "barang_umpan": tebak_umpan(nama, r_industri),
+                                            "alasan": f"Terdaftar sebagai bisnis aktif di Yellow Pages wilayah {r_kota}.",
+                                        })
+                            except Exception as e:
+                                st.warning(f"⚠️ Yellow Pages: {e}")
+
+                    # ---- FALLBACK: jika scraping dapat 0 hasil ----
+                    if not hasil_gabung:
+                        st.warning(
+                            "⚠️ Tidak ada hasil dari scraping langsung (website mungkin blokir bot). "
+                            "Coba gunakan fitur **Input Riset Mandiri** atau coba wilayah lain."
+                        )
+                    else:
+                        # Sort by skor tertinggi
+                        hasil_gabung.sort(key=lambda x: x["skor_potensi"], reverse=True)
+                        st.session_state["riset_hasil"] = hasil_gabung
+                        st.session_state["riset_kota"] = r_kota
+                        st.success(f"✅ Ditemukan **{len(hasil_gabung)} perusahaan** di {r_kota}. Pilih yang ingin ditambahkan ke database:")
+
+            # ---- TAMPILKAN HASIL RISET ----
+            if "riset_hasil" in st.session_state and st.session_state["riset_hasil"]:
+                hasil = st.session_state["riset_hasil"]
+                kota_h = st.session_state.get("riset_kota", "")
+
+                if "riset_selected" not in st.session_state or len(st.session_state["riset_selected"]) != len(hasil):
+                    st.session_state["riset_selected"] = [False] * len(hasil)
+
+                col_sa, col_sb, _ = st.columns([1, 1, 5])
+                with col_sa:
+                    if st.button("☑️ Pilih Semua", key="pilih_semua_riset"):
+                        st.session_state["riset_selected"] = [True] * len(hasil)
+                        st.rerun()
+                with col_sb:
+                    if st.button("🗑️ Reset Hasil", key="reset_riset"):
+                        st.session_state.pop("riset_hasil", None)
+                        st.session_state.pop("riset_selected", None)
+                        st.rerun()
+
+                color_map = {"Tinggi": "🟢", "Sedang": "🟡", "Rendah": "🔴"}
+                sumber_map = {"Jobstreet": "🟣", "Yellow Pages": "🔵"}
+
+                for i, p in enumerate(hasil):
+                    badge = color_map.get(p["estimasi_kebutuhan"], "⚪")
+                    src = sumber_map.get(p["sumber"], "⚫")
+                    col_cb, col_info = st.columns([0.5, 9.5])
+                    with col_cb:
+                        st.session_state["riset_selected"][i] = st.checkbox(
+                            "", value=st.session_state["riset_selected"][i], key=f"rcb_{i}"
+                        )
+                    with col_info:
+                        st.markdown(
+                            f"**{p['nama']}** &nbsp;{src} `{p['sumber']}` &nbsp;|&nbsp; {badge} **{p['estimasi_kebutuhan']}** &nbsp;|&nbsp; Skor: **{p['skor_potensi']}/100**<br>"
+                            f"<small>🎣 Umpan: *{p['barang_umpan']}* &nbsp;·&nbsp; 💡 {p['alasan']}</small>",
+                            unsafe_allow_html=True,
+                        )
+                    st.markdown("")
+
+                dipilih = [p for i, p in enumerate(hasil) if st.session_state["riset_selected"][i]]
+                if dipilih:
+                    if st.button(f"➕ Tambah {len(dipilih)} Prospek ke Database", type="primary", use_container_width=True, key="tambah_riset"):
+                        with st.spinner("Menyimpan ke Google Sheets..."):
+                            for p in dipilih:
+                                target_sheet.append_row([
+                                    datetime.now().strftime("%d/%m/%Y"),
+                                    p["nama"],
+                                    "-",
+                                    "-",
+                                    p["barang_umpan"],
+                                    "Menunggu Strategi",
+                                    f"[{p['sumber']}] {p['jenis']} | Potensi: {p['estimasi_kebutuhan']} | {p['alasan']}",
+                                ])
+                        st.success(f"✅ {len(dipilih)} prospek berhasil ditambahkan ke database!")
+                        st.session_state.pop("riset_hasil", None)
+                        st.session_state.pop("riset_selected", None)
+                        st.cache_resource.clear()
+                        st.rerun()
+
         # --- FILTER & PENCARIAN ---
         if not df.empty:
             col_search, col_filter, col_export = st.columns([3, 2, 1])
