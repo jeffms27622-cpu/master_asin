@@ -4,7 +4,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 import urllib.parse
-import io
+
 
 # ==========================================
 # 1. KONFIGURASI
@@ -201,14 +201,9 @@ def hapus_baris(sheet, row_num):
     """Hapus satu baris dari gsheet."""
     sheet.delete_rows(row_num)
 
-def export_excel(df):
-    """Return bytes excel dari dataframe."""
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        df.drop(columns=["_row", "Chat_WA"], errors="ignore").to_excel(
-            writer, index=False, sheet_name="Data Prospek"
-        )
-    return output.getvalue()
+def export_csv(df):
+    """Return CSV string dari dataframe (tidak perlu library tambahan)."""
+    return df.drop(columns=["_row", "Chat_WA"], errors="ignore").to_csv(index=False).encode("utf-8-sig")
 
 # ==========================================
 # 4. SIDEBAR LOGIN
@@ -359,14 +354,13 @@ elif access_type == "🛡️ Master (Pak Asin)":
             with col_export:
                 st.markdown("<br>", unsafe_allow_html=True)
                 df_export = df.copy()
-                if st.download_button(
-                    "📥 Export Excel",
-                    data=export_excel(df_export),
-                    file_name=f"Prospek_TTS_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                st.download_button(
+                    "📥 Export CSV",
+                    data=export_csv(df_export),
+                    file_name=f"Prospek_TTS_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
                     use_container_width=True,
-                ):
-                    pass
+                )
 
             # Apply filter
             df_view = df.copy()
