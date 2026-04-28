@@ -340,16 +340,16 @@ elif access_type == "🛡️ Master (Pak Asin)":
                         st.error("Nama Perusahaan wajib diisi!")
 
         # ==========================================
-        # --- RISET OTOMATIS (100% GRATIS) ---
+        # --- RISET OTOMATIS (GOOGLE CUSTOM SEARCH) ---
         # ==========================================
-        with st.expander("🔍 Riset Prospek Otomatis — Gratis 100%", expanded=False):
+        with st.expander("🔍 Riset Prospek Otomatis — Google Search", expanded=False):
             st.markdown(
-                '<div class="info-box">Cari perusahaan aktif dari <b>Jobstreet</b> (yang sedang buka lowongan = aktif & butuh ATK) dan <b>Yellow Pages Indonesia</b>. Sistem lalu otomatis menilai potensi tiap perusahaan.</div>',
+                '<div class="info-box">Cari perusahaan potensial menggunakan <b>Google Custom Search API</b> (gratis 100 query/hari). Sistem otomatis menilai potensi dan merekomendasikan barang umpan tiap perusahaan.</div>',
                 unsafe_allow_html=True,
             )
             st.markdown("")
 
-            col_r1, col_r2, col_r3 = st.columns(3)
+            col_r1, col_r2 = st.columns(2)
             with col_r1:
                 r_kota = st.text_input("📍 Kota / Wilayah", placeholder="Contoh: Jakarta Barat")
             with col_r2:
@@ -359,24 +359,14 @@ elif access_type == "🛡️ Master (Pak Asin)":
                      "Hotel & Hospitality", "Pendidikan", "Properti & Konstruksi",
                      "Retail & Distribusi", "Logistik"],
                 )
-            with col_r3:
-                r_sumber = st.multiselect(
-                    "📡 Sumber Data",
-                    ["Jobstreet", "Yellow Pages ID"],
-                    default=["Jobstreet", "Yellow Pages ID"],
-                )
 
             if st.button("🚀 Mulai Riset Otomatis", type="primary", use_container_width=True):
                 if not r_kota.strip():
                     st.warning("Masukkan kota/wilayah terlebih dahulu.")
                 else:
-                    import requests
-                    from bs4 import BeautifulSoup
-                    import re
-                    import time
-                    import random
+                    import requests, re
 
-                    # ---- SCORING ENGINE (rule-based, 100% gratis) ----
+                    # ---- SCORING ENGINE ----
                     SKOR_INDUSTRI = {
                         "bank": 95, "finance": 90, "asuransi": 88, "insurance": 88,
                         "rumah sakit": 92, "hospital": 92, "klinik": 85, "clinic": 85,
@@ -386,7 +376,7 @@ elif access_type == "🛡️ Master (Pak Asin)":
                         "properti": 80, "property": 80, "konstruksi": 78, "construction": 78,
                         "logistik": 82, "logistics": 82, "ekspedisi": 80,
                         "retail": 75, "distributor": 78,
-                        "teknologi": 77, "technology": 77, "it": 75,
+                        "teknologi": 77, "technology": 77,
                         "konsultan": 80, "consulting": 80,
                     }
                     UMPAN_INDUSTRI = {
@@ -408,20 +398,18 @@ elif access_type == "🛡️ Master (Pak Asin)":
                         "konsultan": "Kertas A4 Premium & Folder",
                     }
 
-                    def hitung_skor(nama, jenis):
-                        nama_lower = (nama + " " + jenis).lower()
-                        skor = 60  # base score
+                    def hitung_skor(nama, snippet, jenis):
+                        teks = (nama + " " + snippet + " " + jenis).lower()
+                        skor = 60
                         for kata, nilai in SKOR_INDUSTRI.items():
-                            if kata in nama_lower:
+                            if kata in teks:
                                 skor = max(skor, nilai)
-                        # Bonus: ada kata PT/Tbk = lebih besar
-                        if any(x in nama.upper() for x in ["PT ", "TBK", "PT."]):
+                        if any(x in nama.upper() for x in ["PT ", "PT.", "TBK", "CV ", "CV."]):
                             skor = min(100, skor + 5)
-                        # Bonus: ada nomor telepon = data lebih lengkap
                         return skor
 
-                    def tebak_umpan(nama, jenis):
-                        teks = (nama + " " + jenis).lower()
+                    def tebak_umpan(nama, snippet, jenis):
+                        teks = (nama + " " + snippet + " " + jenis).lower()
                         for kata, umpan in UMPAN_INDUSTRI.items():
                             if kata in teks:
                                 return umpan
@@ -432,107 +420,139 @@ elif access_type == "🛡️ Master (Pak Asin)":
                         if skor >= 72: return "Sedang"
                         return "Rendah"
 
-                    HEADERS_SCRAPE = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8",
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                    }
+                    def ekstrak_nama_pt(title, snippet):
+                        """Coba ambil nama PT/CV dari judul atau snippet hasil Google."""
+                        # Cari pola PT/CV diikuti nama
+                        for teks in [title, snippet]:
+                            match = re.search(
+                                r'\b(PT\.?\s+[\w\s&]+|CV\.?\s+[\w\s&]+|RS\s+[\w\s]+|Hotel\s+[\w\s]+|Bank\s+[\w\s]+)',
+                                teks, re.IGNORECASE
+                            )
+                            if match:
+                                nama = match.group(0).strip()
+                                # Bersihkan nama, max 50 karakter
+                                nama = re.sub(r'\s+', ' ', nama)[:50].strip()
+                                if len(nama) > 5:
+                                    return nama
+                        # Fallback: gunakan bagian pertama judul
+                        return title.split(" - ")[0].split(" | ")[0][:50].strip()
 
-                    hasil_gabung = []
-                    nama_sudah = set()
+                    # ---- AMBIL KUNCI DARI SECRETS ----
+                    GOOGLE_API_KEY = st.secrets.get("GOOGLE_CSE_KEY", "")
+                    GOOGLE_CX = st.secrets.get("GOOGLE_CSE_ID", "")
 
-                    # ---- SUMBER 1: JOBSTREET ----
-                    if "Jobstreet" in r_sumber:
-                        with st.spinner("📡 Scraping Jobstreet..."):
-                            try:
-                                kota_enc = urllib.parse.quote(r_kota.strip())
-                                industri_enc = "" if r_industri == "Semua" else urllib.parse.quote(r_industri)
-                                # Jobstreet pakai query lokasi di URL
-                                url_js = f"https://www.jobstreet.co.id/jobs?q={industri_enc}&l={kota_enc}&sp=homepage"
-                                resp_js = requests.get(url_js, headers=HEADERS_SCRAPE, timeout=15)
-                                soup_js = BeautifulSoup(resp_js.text, "html.parser")
-
-                                # Cari nama perusahaan dari listing
-                                # Jobstreet pakai data-automation="jobCardCompanyLink" atau class tertentu
-                                perusahaan_tags = soup_js.find_all(attrs={"data-automation": "jobCardCompanyLink"})
-                                if not perusahaan_tags:
-                                    # fallback: cari span/a dengan pola nama perusahaan
-                                    perusahaan_tags = soup_js.find_all("a", {"data-automation": "company-name"})
-                                if not perusahaan_tags:
-                                    perusahaan_tags = soup_js.select("[class*='company']")
-
-                                for tag in perusahaan_tags:
-                                    nama = tag.get_text(strip=True)
-                                    if nama and len(nama) > 3 and nama not in nama_sudah:
-                                        nama_sudah.add(nama)
-                                        skor = hitung_skor(nama, r_industri)
-                                        hasil_gabung.append({
-                                            "nama": nama,
-                                            "jenis": r_industri if r_industri != "Semua" else "Perusahaan Aktif",
-                                            "sumber": "Jobstreet",
-                                            "skor_potensi": skor,
-                                            "estimasi_kebutuhan": skor_ke_estimasi(skor),
-                                            "barang_umpan": tebak_umpan(nama, r_industri),
-                                            "alasan": f"Sedang aktif buka lowongan kerja di {r_kota} → operasional berjalan & butuh ATK rutin.",
-                                        })
-                            except Exception as e:
-                                st.warning(f"⚠️ Jobstreet: {e}")
-
-                    # ---- SUMBER 2: YELLOW PAGES ID ----
-                    if "Yellow Pages ID" in r_sumber:
-                        with st.spinner("📡 Scraping Yellow Pages Indonesia..."):
-                            try:
-                                kota_slug = r_kota.strip().lower().replace(" ", "-")
-                                industri_map = {
-                                    "Semua": "kantor",
-                                    "Manufaktur": "pabrik-manufaktur",
-                                    "Perbankan & Keuangan": "perbankan",
-                                    "Rumah Sakit & Klinik": "rumah-sakit",
-                                    "Hotel & Hospitality": "hotel",
-                                    "Pendidikan": "sekolah-universitas",
-                                    "Properti & Konstruksi": "properti-real-estate",
-                                    "Retail & Distribusi": "perdagangan-retail",
-                                    "Logistik": "jasa-pengiriman-ekspedisi",
-                                }
-                                slug_ind = industri_map.get(r_industri, "kantor")
-                                url_yp = f"https://www.yellowpages.co.id/search?q={urllib.parse.quote(slug_ind)}&l={urllib.parse.quote(r_kota.strip())}"
-                                resp_yp = requests.get(url_yp, headers=HEADERS_SCRAPE, timeout=15)
-                                soup_yp = BeautifulSoup(resp_yp.text, "html.parser")
-
-                                # Yellow Pages: nama bisnis biasanya di h2/h3 atau class listing-title
-                                listing_names = soup_yp.select(".listing-name, .business-name, h2.title, h3.name")
-                                if not listing_names:
-                                    listing_names = soup_yp.find_all(["h2", "h3"], class_=re.compile(r"(name|title|listing|company)", re.I))
-
-                                for tag in listing_names:
-                                    nama = tag.get_text(strip=True)
-                                    if nama and len(nama) > 3 and nama not in nama_sudah:
-                                        nama_sudah.add(nama)
-                                        skor = hitung_skor(nama, r_industri)
-                                        hasil_gabung.append({
-                                            "nama": nama,
-                                            "jenis": r_industri if r_industri != "Semua" else "Bisnis Terdaftar",
-                                            "sumber": "Yellow Pages",
-                                            "skor_potensi": skor,
-                                            "estimasi_kebutuhan": skor_ke_estimasi(skor),
-                                            "barang_umpan": tebak_umpan(nama, r_industri),
-                                            "alasan": f"Terdaftar sebagai bisnis aktif di Yellow Pages wilayah {r_kota}.",
-                                        })
-                            except Exception as e:
-                                st.warning(f"⚠️ Yellow Pages: {e}")
-
-                    # ---- FALLBACK: jika scraping dapat 0 hasil ----
-                    if not hasil_gabung:
-                        st.warning(
-                            "⚠️ Tidak ada hasil dari scraping langsung (website mungkin blokir bot). "
-                            "Coba gunakan fitur **Input Riset Mandiri** atau coba wilayah lain."
+                    if not GOOGLE_API_KEY or not GOOGLE_CX:
+                        st.error(
+                            "❌ **Google CSE belum dikonfigurasi.**\n\n"
+                            "Tambahkan di Streamlit Secrets:\n"
+                            "```\nGOOGLE_CSE_KEY = \"AIza...\"\nGOOGLE_CSE_ID = \"...:...\"\n```\n\n"
+                            "Lihat panduan setup di bawah ⬇️"
                         )
                     else:
-                        # Sort by skor tertinggi
-                        hasil_gabung.sort(key=lambda x: x["skor_potensi"], reverse=True)
-                        st.session_state["riset_hasil"] = hasil_gabung
-                        st.session_state["riset_kota"] = r_kota
-                        st.success(f"✅ Ditemukan **{len(hasil_gabung)} perusahaan** di {r_kota}. Pilih yang ingin ditambahkan ke database:")
+                        # Buat beberapa query berbeda untuk hasil lebih banyak
+                        industri_q = r_industri if r_industri != "Semua" else "perusahaan kantor"
+                        queries = [
+                            f'PT "{r_kota}" {industri_q} site:linkedin.com/company OR site:yellowpages.co.id',
+                            f'daftar perusahaan {industri_q} "{r_kota}"',
+                            f'PT CV {industri_q} {r_kota} Indonesia',
+                        ]
+
+                        hasil_gabung = []
+                        nama_sudah = set()
+
+                        progress = st.progress(0, text="Mencari di Google...")
+                        for qi, query in enumerate(queries):
+                            try:
+                                resp = requests.get(
+                                    "https://www.googleapis.com/customsearch/v1",
+                                    params={
+                                        "key": GOOGLE_API_KEY,
+                                        "cx": GOOGLE_CX,
+                                        "q": query,
+                                        "num": 10,
+                                        "gl": "id",
+                                        "hl": "id",
+                                    },
+                                    timeout=10,
+                                )
+                                data = resp.json()
+
+                                if "error" in data:
+                                    st.error(f"Google API error: {data['error'].get('message', 'Unknown')}")
+                                    break
+
+                                items = data.get("items", [])
+                                for item in items:
+                                    title = item.get("title", "")
+                                    snippet = item.get("snippet", "")
+                                    nama = ekstrak_nama_pt(title, snippet)
+
+                                    # Filter: skip jika sudah ada atau terlalu pendek
+                                    if not nama or len(nama) < 4 or nama.lower() in nama_sudah:
+                                        continue
+                                    # Skip jika bukan perusahaan (filter kasar)
+                                    if not any(x in nama.upper() for x in ["PT", "CV", "RS", "BANK", "HOTEL", "KLINIK", "SEKOLAH"]):
+                                        if not any(x in snippet.lower() for x in ["perusahaan", "company", "tbk", "kantor"]):
+                                            continue
+
+                                    nama_sudah.add(nama.lower())
+                                    skor = hitung_skor(nama, snippet, r_industri)
+                                    hasil_gabung.append({
+                                        "nama": nama,
+                                        "jenis": r_industri if r_industri != "Semua" else "Perusahaan",
+                                        "sumber": "Google Search",
+                                        "skor_potensi": skor,
+                                        "estimasi_kebutuhan": skor_ke_estimasi(skor),
+                                        "barang_umpan": tebak_umpan(nama, snippet, r_industri),
+                                        "alasan": snippet[:120] + "..." if len(snippet) > 120 else snippet,
+                                    })
+
+                            except Exception as e:
+                                st.warning(f"Query {qi+1} gagal: {e}")
+
+                            progress.progress((qi + 1) / len(queries), text=f"Query {qi+1}/{len(queries)} selesai...")
+
+                        progress.empty()
+
+                        if not hasil_gabung:
+                            st.warning("⚠️ Tidak ada hasil. Coba ganti kata kunci industri atau wilayah.")
+                        else:
+                            hasil_gabung.sort(key=lambda x: x["skor_potensi"], reverse=True)
+                            # Hapus duplikat lebih ketat
+                            seen = set()
+                            unik = []
+                            for p in hasil_gabung:
+                                key = p["nama"].lower()[:20]
+                                if key not in seen:
+                                    seen.add(key)
+                                    unik.append(p)
+                            st.session_state["riset_hasil"] = unik
+                            st.session_state["riset_kota"] = r_kota
+                            st.success(f"✅ Ditemukan **{len(unik)} perusahaan** potensial di {r_kota}!")
+
+            # ---- PANDUAN SETUP ----
+            with st.expander("📖 Cara Setup Google Custom Search (sekali saja, gratis)", expanded=False):
+                st.markdown("""
+**Langkah 1 — Buat API Key:**
+1. Buka [console.cloud.google.com](https://console.cloud.google.com)
+2. Buat project baru → **APIs & Services → Credentials → Create API Key**
+3. Enable **Custom Search API** di Library
+4. Salin API Key → tambahkan ke Streamlit Secrets sebagai `GOOGLE_CSE_KEY`
+
+**Langkah 2 — Buat Custom Search Engine:**
+1. Buka [programmablesearchengine.google.com](https://programmablesearchengine.google.com)
+2. Klik **Add** → isi nama bebas → **Search the entire web** → Create
+3. Salin **Search Engine ID** → tambahkan ke Streamlit Secrets sebagai `GOOGLE_CSE_ID`
+
+**Tambahkan ke Streamlit Secrets:**
+```toml
+GOOGLE_CSE_KEY = "AIzaSy..."
+GOOGLE_CSE_ID = "a1b2c3d4e5:..."
+```
+
+**Limit gratis:** 100 query/hari. Tiap klik Riset = 3 query → artinya bisa **33x riset per hari** secara gratis.
+                """)
+
 
             # ---- TAMPILKAN HASIL RISET ----
             if "riset_hasil" in st.session_state and st.session_state["riset_hasil"]:
