@@ -421,8 +421,6 @@ elif access_type == "🛡️ Master (Pak Asin)":
                         return "Rendah"
 
                     def ekstrak_nama_pt(title, snippet):
-                        """Coba ambil nama PT/CV dari judul atau snippet hasil Google."""
-                        # Cari pola PT/CV diikuti nama
                         for teks in [title, snippet]:
                             match = re.search(
                                 r'\b(PT\.?\s+[\w\s&]+|CV\.?\s+[\w\s&]+|RS\s+[\w\s]+|Hotel\s+[\w\s]+|Bank\s+[\w\s]+)',
@@ -430,81 +428,78 @@ elif access_type == "🛡️ Master (Pak Asin)":
                             )
                             if match:
                                 nama = match.group(0).strip()
-                                # Bersihkan nama, max 50 karakter
                                 nama = re.sub(r'\s+', ' ', nama)[:50].strip()
                                 if len(nama) > 5:
                                     return nama
-                        # Fallback: gunakan bagian pertama judul
                         return title.split(" - ")[0].split(" | ")[0][:50].strip()
 
-                    # ---- AMBIL KUNCI DARI SECRETS ----
-                    GOOGLE_API_KEY = st.secrets.get("GOOGLE_CSE_KEY", "")
-                    GOOGLE_CX = st.secrets.get("GOOGLE_CSE_ID", "")
-
-                    if not GOOGLE_API_KEY or not GOOGLE_CX:
+                    # ---- CEK API KEY ----
+                    SERP_KEY = st.secrets.get("SERPAPI_KEY", "")
+                    if not SERP_KEY:
                         st.error(
-                            "❌ **Google CSE belum dikonfigurasi.**\n\n"
-                            "Tambahkan di Streamlit Secrets:\n"
-                            "```\nGOOGLE_CSE_KEY = \"AIza...\"\nGOOGLE_CSE_ID = \"...:...\"\n```\n\n"
-                            "Lihat panduan setup di bawah ⬇️"
+                            "❌ **SERPAPI_KEY belum diset.**\n\n"
+                            "Daftar gratis di [serpapi.com](https://serpapi.com) lalu tambahkan ke Streamlit Secrets:\n"
+                            "```\nSERPAPI_KEY = \"abc123...\"\n```"
                         )
                     else:
-                        # Buat beberapa query berbeda untuk hasil lebih banyak
-                        industri_q = r_industri if r_industri != "Semua" else "perusahaan kantor"
+                        industri_q = r_industri if r_industri != "Semua" else "perusahaan"
                         queries = [
-                            f'PT "{r_kota}" {industri_q} site:linkedin.com/company OR site:yellowpages.co.id',
-                            f'daftar perusahaan {industri_q} "{r_kota}"',
-                            f'PT CV {industri_q} {r_kota} Indonesia',
+                            f'PT {industri_q} "{r_kota}" Indonesia',
+                            f'CV {industri_q} "{r_kota}" kantor',
+                            f'perusahaan {industri_q} {r_kota} aktif lowongan',
                         ]
 
                         hasil_gabung = []
                         nama_sudah = set()
 
-                        progress = st.progress(0, text="Mencari di Google...")
+                        progress = st.progress(0, text="🔍 Mencari prospek...")
                         for qi, query in enumerate(queries):
                             try:
                                 resp = requests.get(
-                                    "https://www.googleapis.com/customsearch/v1",
+                                    "https://serpapi.com/search",
                                     params={
-                                        "key": GOOGLE_API_KEY,
-                                        "cx": GOOGLE_CX,
+                                        "api_key": SERP_KEY,
+                                        "engine": "google",
                                         "q": query,
-                                        "num": 10,
-                                        "gl": "id",
+                                        "location": "Indonesia",
                                         "hl": "id",
+                                        "gl": "id",
+                                        "num": 10,
                                     },
-                                    timeout=10,
+                                    timeout=15,
                                 )
                                 data = resp.json()
 
                                 if "error" in data:
-                                    st.error(f"Google API error: {data['error'].get('message', 'Unknown')}")
+                                    st.error(f"SerpAPI error: {data['error']}")
                                     break
 
-                                items = data.get("items", [])
+                                # Ambil dari organic_results
+                                items = data.get("organic_results", [])
                                 for item in items:
-                                    title = item.get("title", "")
+                                    title   = item.get("title", "")
                                     snippet = item.get("snippet", "")
-                                    nama = ekstrak_nama_pt(title, snippet)
+                                    nama    = ekstrak_nama_pt(title, snippet)
 
-                                    # Filter: skip jika sudah ada atau terlalu pendek
-                                    if not nama or len(nama) < 4 or nama.lower() in nama_sudah:
+                                    if not nama or len(nama) < 4:
                                         continue
-                                    # Skip jika bukan perusahaan (filter kasar)
-                                    if not any(x in nama.upper() for x in ["PT", "CV", "RS", "BANK", "HOTEL", "KLINIK", "SEKOLAH"]):
-                                        if not any(x in snippet.lower() for x in ["perusahaan", "company", "tbk", "kantor"]):
-                                            continue
+                                    if nama.lower() in nama_sudah:
+                                        continue
+                                    # Filter kasar — pastikan ada indikasi perusahaan
+                                    teks_cek = (nama + snippet).upper()
+                                    if not any(x in teks_cek for x in ["PT", "CV", "RS", "BANK", "HOTEL", "KLINIK", "SEKOLAH", "PERUSAHAAN", "COMPANY", "TBK"]):
+                                        continue
 
                                     nama_sudah.add(nama.lower())
                                     skor = hitung_skor(nama, snippet, r_industri)
                                     hasil_gabung.append({
                                         "nama": nama,
                                         "jenis": r_industri if r_industri != "Semua" else "Perusahaan",
-                                        "sumber": "Google Search",
+                                        "sumber": "Google (SerpAPI)",
                                         "skor_potensi": skor,
                                         "estimasi_kebutuhan": skor_ke_estimasi(skor),
                                         "barang_umpan": tebak_umpan(nama, snippet, r_industri),
-                                        "alasan": snippet[:120] + "..." if len(snippet) > 120 else snippet,
+                                        "alasan": snippet[:150] + "..." if len(snippet) > 150 else snippet,
                                     })
 
                             except Exception as e:
@@ -515,10 +510,9 @@ elif access_type == "🛡️ Master (Pak Asin)":
                         progress.empty()
 
                         if not hasil_gabung:
-                            st.warning("⚠️ Tidak ada hasil. Coba ganti kata kunci industri atau wilayah.")
+                            st.warning("⚠️ Tidak ada hasil. Coba ganti industri atau wilayah.")
                         else:
                             hasil_gabung.sort(key=lambda x: x["skor_potensi"], reverse=True)
-                            # Hapus duplikat lebih ketat
                             seen = set()
                             unik = []
                             for p in hasil_gabung:
@@ -531,26 +525,19 @@ elif access_type == "🛡️ Master (Pak Asin)":
                             st.success(f"✅ Ditemukan **{len(unik)} perusahaan** potensial di {r_kota}!")
 
             # ---- PANDUAN SETUP ----
-            with st.expander("📖 Cara Setup Google Custom Search (sekali saja, gratis)", expanded=False):
+            with st.expander("📖 Cara Setup SerpAPI (2 menit, gratis, tanpa kartu kredit)", expanded=False):
                 st.markdown("""
-**Langkah 1 — Buat API Key:**
-1. Buka [console.cloud.google.com](https://console.cloud.google.com)
-2. Buat project baru → **APIs & Services → Credentials → Create API Key**
-3. Enable **Custom Search API** di Library
-4. Salin API Key → tambahkan ke Streamlit Secrets sebagai `GOOGLE_CSE_KEY`
+**Langkah 1 — Daftar SerpAPI:**
+1. Buka [serpapi.com](https://serpapi.com) → klik **"Get Started for Free"**
+2. Daftar pakai email (tidak perlu kartu kredit)
+3. Masuk ke dashboard → salin **API Key** di halaman utama
 
-**Langkah 2 — Buat Custom Search Engine:**
-1. Buka [programmablesearchengine.google.com](https://programmablesearchengine.google.com)
-2. Klik **Add** → isi nama bebas → **Search the entire web** → Create
-3. Salin **Search Engine ID** → tambahkan ke Streamlit Secrets sebagai `GOOGLE_CSE_ID`
-
-**Tambahkan ke Streamlit Secrets:**
+**Langkah 2 — Tambahkan ke Streamlit Secrets:**
 ```toml
-GOOGLE_CSE_KEY = "AIzaSy..."
-GOOGLE_CSE_ID = "a1b2c3d4e5:..."
+SERPAPI_KEY = "abc123def456..."
 ```
 
-**Limit gratis:** 100 query/hari. Tiap klik Riset = 3 query → artinya bisa **33x riset per hari** secara gratis.
+**Limit gratis:** 100 pencarian/bulan. Tiap klik Riset = 3 pencarian → bisa **33x riset per bulan** gratis.
                 """)
 
 
